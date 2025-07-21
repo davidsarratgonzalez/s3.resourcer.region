@@ -33,6 +33,12 @@ var s3_resourcer = {
               "description": "The S3 object path."
             },
             {
+              "key": "region",
+              "type": "string",
+              "title": "AWS Region",
+              "description": "The AWS region where the bucket is located (e.g., 'us-east-1', 'eu-west-1'). Optional - if not provided, AWS will use its default region resolution."
+            },
+            {
               "key": "format",
               "type": "string",
               "title": "R object class",
@@ -86,6 +92,12 @@ var s3_resourcer = {
               "description": "The S3 object path."
             },
             {
+              "key": "region",
+              "type": "string",
+              "title": "AWS Region",
+              "description": "The AWS region where the bucket is located (e.g., 'us-east-1', 'eu-west-1'). Optional - if not provided, AWS will use its default region resolution."
+            },
+            {
               "key": "format",
               "type": "string",
               "title": "R object class",
@@ -137,6 +149,12 @@ var s3_resourcer = {
               "type": "string",
               "title": "Object path",
               "description": "The S3 object path."
+            },
+            {
+              "key": "region",
+              "type": "string",
+              "title": "AWS Region",
+              "description": "The AWS region where the bucket is located (e.g., 'us-east-1', 'eu-west-1'). Optional - if not provided, AWS will use its default region resolution."
             },
             {
               "key": "format",
@@ -467,6 +485,12 @@ var s3_resourcer = {
               "description": "The S3 object path."
             },
             {
+              "key": "region",
+              "type": "string",
+              "title": "AWS Region",
+              "description": "The AWS region where the bucket is located (e.g., 'us-east-1', 'eu-west-1'). Optional - if not provided, AWS will use its default region resolution."
+            },
+            {
               "key": "master",
               "type": "string",
               "title": "Spark cluster name/url",
@@ -609,6 +633,7 @@ var s3_resourcer = {
             name: name,
             url: "s3://" + params.bucket + "/" + params.obj,
             format: params.format,
+            region: params.region || "",
             identity: credentials.awskey,
             secret: credentials.awssecret
         };
@@ -646,6 +671,9 @@ var s3_resourcer = {
       if (params.read) {
         query.push("read=" + params.read);
       }
+      if (params.region) {
+        query.push("region=" + params.region);
+      }
       if (params.config) {
         var configs = params.config.split("\n");
         for (var i = 0; i < configs.length; i++) {
@@ -660,6 +688,7 @@ var s3_resourcer = {
       return {
           name: name,
           url: "s3+spark://" + params.bucket + "/" + params.obj + (query.length > 0 ? "?" + query.join("&") : ""),
+          region: params.region || "",
           identity: credentials.awskey,
           secret: credentials.awssecret
       };

@@ -47,11 +47,14 @@ S3SparkResourceConnector <- R6::R6Class(
         conf$`spark.hadoop.fs.s3a.connection.ssl.enabled` <- "true"
         master <- "local"
         version <- NULL
+        region <- if (is.null(resource$region) || nchar(resource$region) == 0) "" else resource$region
         for (n in names(url$query)) {
           if (n == "master") {
             master <- url$query$master
           } else if (n == "version") {
             version <- url$query$version
+          } else if (n == "region") {
+            region <- url$query$region
           } else if (n == "read") {
             if (url$query$read == "delta") {
               conf$`spark.sql.extensions` <- "io.delta.sql.DeltaSparkSessionExtension"
@@ -64,8 +67,15 @@ S3SparkResourceConnector <- R6::R6Class(
         }
         
         if (identical(url$scheme, "s3+spark")) {
-          # FIXME host = aws region ?
-          conf$`spark.hadoop.fs.s3a.endpoint` <- url$host
+          # Only set AWS S3 endpoint if region is specified
+          if (nchar(region) > 0) {
+            if (region == "us-east-1") {
+              conf$`spark.hadoop.fs.s3a.endpoint` <- "s3.amazonaws.com"
+            } else {
+              conf$`spark.hadoop.fs.s3a.endpoint` <- paste0("s3.", region, ".amazonaws.com")
+            }
+          }
+          # If no region specified, let Spark/AWS use default region resolution
           conn <- sparklyr::spark_connect(master = master, version = version, config = conf, spark_home = spark_home_dir())
         } else {
           protocol <- "http"
@@ -94,7 +104,13 @@ S3SparkResourceConnector <- R6::R6Class(
       if (is.null(url$path)) {
         stop("No database table name")
       } else {
-        paste0("s3a://", url$path)
+        # Construct proper s3a:// URL with bucket and object path
+        if (identical(url$scheme, "s3+spark")) {
+          paste0("s3a://", url$host, url$path)
+        } else {
+          # For HTTP S3 (Minio), use the full path
+          paste0("s3a://", url$path)
+        }
       }
     },
     

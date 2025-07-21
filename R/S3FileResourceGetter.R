@@ -42,9 +42,17 @@ S3FileResourceGetter <- R6::R6Class(
 
         private$loadS3()
         if (url$scheme == "s3") {
-          aws.s3::save_object(object = url$path, bucket = url$host, 
-                              file = path, overwrite = TRUE,
-                              key = resource$identity, secret = resource$secret)
+          # Only pass region if it's specified and not empty
+          if (!is.null(resource$region) && nchar(resource$region) > 0) {
+            aws.s3::save_object(object = url$path, bucket = url$host, 
+                                file = path, overwrite = TRUE,
+                                region = resource$region,
+                                key = resource$identity, secret = resource$secret)
+          } else {
+            aws.s3::save_object(object = url$path, bucket = url$host, 
+                                file = path, overwrite = TRUE,
+                                key = resource$identity, secret = resource$secret)
+          }
           
         } else {
           bucket <- dirname(url$path)
@@ -52,10 +60,18 @@ S3FileResourceGetter <- R6::R6Class(
           if (!is.null(url$port)) {
             base_url <- paste0(url$host, ":", url$port)
           }
-          aws.s3::save_object(object = fileName, bucket = bucket, base_url = base_url, 
-                              use_https = (url$scheme == "s3+https"), region = "", 
-                              file = path, overwrite = TRUE,
-                              key = resource$identity, secret = resource$secret)
+          # Only pass region if it's specified and not empty
+          if (!is.null(resource$region) && nchar(resource$region) > 0) {
+            aws.s3::save_object(object = fileName, bucket = bucket, base_url = base_url, 
+                                use_https = (url$scheme == "s3+https"), region = resource$region, 
+                                file = path, overwrite = TRUE,
+                                key = resource$identity, secret = resource$secret)
+          } else {
+            aws.s3::save_object(object = fileName, bucket = bucket, base_url = base_url, 
+                                use_https = (url$scheme == "s3+https"), 
+                                file = path, overwrite = TRUE,
+                                key = resource$identity, secret = resource$secret)
+          }
         }
         super$newFileObject(path, temp = TRUE)
       } else {

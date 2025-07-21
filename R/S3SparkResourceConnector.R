@@ -32,9 +32,6 @@ S3SparkResourceConnector <- R6::R6Class(
       if (self$isFor(resource)) {
         super$loadDBI()
         private$loadSparklyr()
-        # Extract base URL without s3config section for parsing
-        baseUrl <- strsplit(resource$url, "//s3config::")[[1]][1]
-        resource$url <- baseUrl
         url <- super$parseURL(resource)
         
         conf <- spark_config()
@@ -101,15 +98,15 @@ S3SparkResourceConnector <- R6::R6Class(
     #' @param resource A valid resource object.
     #' @return The SQL table name.
     getTableName = function(resource) {
-      # Extract base URL without s3config section
-      baseUrl <- strsplit(resource$url, "//s3config::")[[1]][1]
-      url <- httr::parse_url(baseUrl)
+      url <- httr::parse_url(resource$url)
       if (is.null(url$path)) {
         stop("No database table name")
       } else {
+        # Extract actual bucket name (without region)
+        bucket <- private$extractBucket(resource)
         # Construct proper s3a:// URL with bucket and object path
         if (identical(url$scheme, "s3+spark")) {
-          paste0("s3a://", url$host, "/", url$path)
+          paste0("s3a://", bucket, "/", url$path)
         } else {
           # For HTTP S3 (Minio), use the full path
           paste0("s3a://", url$path)
@@ -147,16 +144,41 @@ S3SparkResourceConnector <- R6::R6Class(
   ),
   private = list(
     extractRegion = function(resource) {
-      # Extract region from URL structure like s3+spark://bucket/object//s3config::/region:us-east-1
-      parts <- strsplit(resource$url, "//s3config::")[[1]]
-      if (length(parts) > 1) {
-        config_part <- parts[2]
-        region_match <- regexec("/region:([^/]+)", config_part)
-        if (region_match[[1]][1] != -1) {
-          return(regmatches(config_part, region_match)[[1]][2])
+      # Extract region from URL structure like s3+spark://bucket@region/object  
+      # Parse manually since httr::parse_url treats @ as user@host separator
+      if (grepl("@", resource$url)) {
+        url_part <- sub("^s3\\+(spark|http|https)://", "", resource$url)  # Remove scheme
+        host_part <- strsplit(url_part, "/")[[1]][1]  # Get host part before first /
+        # Remove query parameters if present
+        host_part <- strsplit(host_part, "\\?")[[1]][1]
+        if (grepl("@", host_part)) {
+          parts <- strsplit(host_part, "@")[[1]]
+          if (length(parts) == 2) {
+            return(parts[2])  # Return the region part
+          }
         }
       }
       return(NULL)
+    },
+    
+    extractBucket = function(resource) {
+      # Extract bucket name from URL structure like s3+spark://bucket@region/object
+      # Parse manually since httr::parse_url treats @ as user@host separator
+      if (grepl("@", resource$url)) {
+        url_part <- sub("^s3\\+(spark|http|https)://", "", resource$url)  # Remove scheme
+        host_part <- strsplit(url_part, "/")[[1]][1]  # Get host part before first /
+        # Remove query parameters if present
+        host_part <- strsplit(host_part, "\\?")[[1]][1]
+        if (grepl("@", host_part)) {
+          parts <- strsplit(host_part, "@")[[1]]
+          if (length(parts) == 2) {
+            return(parts[1])  # Return the bucket part
+          }
+        }
+      }
+      # Fallback to normal URL parsing if no @ present
+      url <- httr::parse_url(resource$url)
+      return(url$hostname)
     },
     
     getReadParam = function(resource) {

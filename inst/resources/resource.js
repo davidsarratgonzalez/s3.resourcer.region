@@ -629,12 +629,14 @@ var s3_resourcer = {
     // Resource factory functions to be reused
     //
     var toS3Resource = function(name, params, credentials) {
-        var url = "s3://" + params.bucket + "/" + params.obj;
+        var host = params.bucket;
         
-        // Encode region into URL structure if provided
+        // Encode region using @ delimiter if provided
         if (params.region) {
-            url += "//s3config::/region:" + params.region;
+            host += "@" + params.region;
         }
+        
+        var url = "s3://" + host + "/" + params.obj;
         
         return {
             name: name,
@@ -688,12 +690,14 @@ var s3_resourcer = {
     
     var toSparkResource = function(name, params, credentials) {
       var query = makeSparkQuery(params);
-      var url = "s3+spark://" + params.bucket + "/" + params.obj + (query.length > 0 ? "?" + query.join("&") : "");
+      var host = params.bucket;
       
-      // Encode region into URL structure if provided
+      // Encode region using @ delimiter if provided
       if (params.region) {
-          url += "//s3config::/region:" + params.region;
+          host += "@" + params.region;
       }
+      
+      var url = "s3+spark://" + host + "/" + params.obj + (query.length > 0 ? "?" + query.join("&") : "");
       
       return {
           name: name,

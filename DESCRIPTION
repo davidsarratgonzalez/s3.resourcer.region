@@ -1,7 +1,7 @@
 Package: s3.resourcer
 Type: Package
 Title: S3 Resource Resolver
-Version: 1.2.0
+Version: 1.2.1
 Authors@R:
     c(person(given = "Yannick",
              family = "Marcon",

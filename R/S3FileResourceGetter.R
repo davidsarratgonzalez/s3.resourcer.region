@@ -38,30 +38,32 @@ S3FileResourceGetter <- R6::R6Class(
         fileName <- super$extractFileName(resource)
         downloadDir <- super$makeDownloadDir()
         path <- file.path(downloadDir, fileName)
-        # Extract base URL without s3config section for S3 operations
-        baseUrl <- strsplit(resource$url, "//s3config::")[[1]][1]
-        url <- httr::parse_url(baseUrl)
+        url <- httr::parse_url(resource$url)
 
         private$loadS3()
         if (url$scheme == "s3") {
-          # Extract region from URL if specified
+          # Extract region and bucket from URL
           region <- private$extractRegion(resource)
+          bucket <- private$extractBucket(resource)
+          
           if (!is.null(region) && nchar(region) > 0) {
-            aws.s3::save_object(object = url$path, bucket = url$host, 
+            aws.s3::save_object(object = url$path, bucket = bucket, 
                                 file = path, overwrite = TRUE,
                                 region = region,
                                 key = resource$identity, secret = resource$secret)
           } else {
-            aws.s3::save_object(object = url$path, bucket = url$host, 
+            aws.s3::save_object(object = url$path, bucket = bucket, 
                                 file = path, overwrite = TRUE,
                                 key = resource$identity, secret = resource$secret)
           }
           
         } else {
           bucket <- dirname(url$path)
-          base_url <- url$host
+          # Extract the actual host (without region) for base_url
+          hostname <- private$extractBucket(resource)
+          base_url <- hostname
           if (!is.null(url$port)) {
-            base_url <- paste0(url$host, ":", url$port)
+            base_url <- paste0(hostname, ":", url$port)
           }
           # Extract region from URL if specified
           region <- private$extractRegion(resource)
@@ -92,16 +94,37 @@ S3FileResourceGetter <- R6::R6Class(
     },
     
     extractRegion = function(resource) {
-      # Extract region from URL structure like s3://bucket/object//s3config::/region:us-east-1
-      parts <- strsplit(resource$url, "//s3config::")[[1]]
-      if (length(parts) > 1) {
-        config_part <- parts[2]
-        region_match <- regexec("/region:([^/]+)", config_part)
-        if (region_match[[1]][1] != -1) {
-          return(regmatches(config_part, region_match)[[1]][2])
+      # Extract region from URL structure like s3://bucket@region/object
+      # Parse manually since httr::parse_url treats @ as user@host separator
+      if (grepl("@", resource$url)) {
+        url_part <- sub("^s3(\\+http|\\+https)?://", "", resource$url)  # Remove scheme
+        host_part <- strsplit(url_part, "/")[[1]][1]  # Get host part before first /
+        if (grepl("@", host_part)) {
+          parts <- strsplit(host_part, "@")[[1]]
+          if (length(parts) == 2) {
+            return(parts[2])  # Return the region part
+          }
         }
       }
       return(NULL)
+    },
+    
+    extractBucket = function(resource) {
+      # Extract bucket name from URL structure like s3://bucket@region/object
+      # Parse manually since httr::parse_url treats @ as user@host separator
+      if (grepl("@", resource$url)) {
+        url_part <- sub("^s3(\\+http|\\+https)?://", "", resource$url)  # Remove scheme
+        host_part <- strsplit(url_part, "/")[[1]][1]  # Get host part before first /
+        if (grepl("@", host_part)) {
+          parts <- strsplit(host_part, "@")[[1]]
+          if (length(parts) == 2) {
+            return(parts[1])  # Return the bucket part
+          }
+        }
+      }
+      # Fallback to normal URL parsing if no @ present
+      url <- httr::parse_url(resource$url)
+      return(url$hostname)
     }
   )
 )

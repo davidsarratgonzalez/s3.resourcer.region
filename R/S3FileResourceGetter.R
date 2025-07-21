@@ -38,15 +38,18 @@ S3FileResourceGetter <- R6::R6Class(
         fileName <- super$extractFileName(resource)
         downloadDir <- super$makeDownloadDir()
         path <- file.path(downloadDir, fileName)
-        url <- httr::parse_url(resource$url)
+        # Extract base URL without s3config section for S3 operations
+        baseUrl <- strsplit(resource$url, "//s3config::")[[1]][1]
+        url <- httr::parse_url(baseUrl)
 
         private$loadS3()
         if (url$scheme == "s3") {
-          # Only pass region if it's specified and not empty
-          if (!is.null(resource$region) && nchar(resource$region) > 0) {
+          # Extract region from URL if specified
+          region <- private$extractRegion(resource)
+          if (!is.null(region) && nchar(region) > 0) {
             aws.s3::save_object(object = url$path, bucket = url$host, 
                                 file = path, overwrite = TRUE,
-                                region = resource$region,
+                                region = region,
                                 key = resource$identity, secret = resource$secret)
           } else {
             aws.s3::save_object(object = url$path, bucket = url$host, 
@@ -60,10 +63,11 @@ S3FileResourceGetter <- R6::R6Class(
           if (!is.null(url$port)) {
             base_url <- paste0(url$host, ":", url$port)
           }
-          # Only pass region if it's specified and not empty
-          if (!is.null(resource$region) && nchar(resource$region) > 0) {
+          # Extract region from URL if specified
+          region <- private$extractRegion(resource)
+          if (!is.null(region) && nchar(region) > 0) {
             aws.s3::save_object(object = fileName, bucket = bucket, base_url = base_url, 
-                                use_https = (url$scheme == "s3+https"), region = resource$region, 
+                                use_https = (url$scheme == "s3+https"), region = region, 
                                 file = path, overwrite = TRUE,
                                 key = resource$identity, secret = resource$secret)
           } else {
@@ -85,6 +89,19 @@ S3FileResourceGetter <- R6::R6Class(
       if (!require("aws.s3")) {
         install.packages("aws.s3", repos = "https://cloud.r-project.org", dependencies = TRUE)
       }
+    },
+    
+    extractRegion = function(resource) {
+      # Extract region from URL structure like s3://bucket/object//s3config::/region:us-east-1
+      parts <- strsplit(resource$url, "//s3config::")[[1]]
+      if (length(parts) > 1) {
+        config_part <- parts[2]
+        region_match <- regexec("/region:([^/]+)", config_part)
+        if (region_match[[1]][1] != -1) {
+          return(regmatches(config_part, region_match)[[1]][2])
+        }
+      }
+      return(NULL)
     }
   )
 )

@@ -32,6 +32,9 @@ S3SparkResourceConnector <- R6::R6Class(
       if (self$isFor(resource)) {
         super$loadDBI()
         private$loadSparklyr()
+        # Extract base URL without s3config section for parsing
+        baseUrl <- strsplit(resource$url, "//s3config::")[[1]][1]
+        resource$url <- baseUrl
         url <- super$parseURL(resource)
         
         conf <- spark_config()
@@ -47,14 +50,12 @@ S3SparkResourceConnector <- R6::R6Class(
         conf$`spark.hadoop.fs.s3a.connection.ssl.enabled` <- "true"
         master <- "local"
         version <- NULL
-        region <- if (is.null(resource$region) || nchar(resource$region) == 0) "" else resource$region
+        region <- private$extractRegion(resource)
         for (n in names(url$query)) {
           if (n == "master") {
             master <- url$query$master
           } else if (n == "version") {
             version <- url$query$version
-          } else if (n == "region") {
-            region <- url$query$region
           } else if (n == "read") {
             if (url$query$read == "delta") {
               conf$`spark.sql.extensions` <- "io.delta.sql.DeltaSparkSessionExtension"
@@ -68,7 +69,7 @@ S3SparkResourceConnector <- R6::R6Class(
         
         if (identical(url$scheme, "s3+spark")) {
           # Only set AWS S3 endpoint if region is specified
-          if (nchar(region) > 0) {
+          if (!is.null(region) && nchar(region) > 0) {
             if (region == "us-east-1") {
               conf$`spark.hadoop.fs.s3a.endpoint` <- "s3.amazonaws.com"
             } else {
@@ -100,13 +101,15 @@ S3SparkResourceConnector <- R6::R6Class(
     #' @param resource A valid resource object.
     #' @return The SQL table name.
     getTableName = function(resource) {
-      url <- httr::parse_url(resource$url)
+      # Extract base URL without s3config section
+      baseUrl <- strsplit(resource$url, "//s3config::")[[1]][1]
+      url <- httr::parse_url(baseUrl)
       if (is.null(url$path)) {
         stop("No database table name")
       } else {
         # Construct proper s3a:// URL with bucket and object path
         if (identical(url$scheme, "s3+spark")) {
-          paste0("s3a://", url$host, url$path)
+          paste0("s3a://", url$host, "/", url$path)
         } else {
           # For HTTP S3 (Minio), use the full path
           paste0("s3a://", url$path)
@@ -143,6 +146,19 @@ S3SparkResourceConnector <- R6::R6Class(
     
   ),
   private = list(
+    extractRegion = function(resource) {
+      # Extract region from URL structure like s3+spark://bucket/object//s3config::/region:us-east-1
+      parts <- strsplit(resource$url, "//s3config::")[[1]]
+      if (length(parts) > 1) {
+        config_part <- parts[2]
+        region_match <- regexec("/region:([^/]+)", config_part)
+        if (region_match[[1]][1] != -1) {
+          return(regmatches(config_part, region_match)[[1]][2])
+        }
+      }
+      return(NULL)
+    },
+    
     getReadParam = function(resource) {
       url <- httr::parse_url(resource$url)
       if (!is.null(url$query) && !is.null(url$query$read)) {

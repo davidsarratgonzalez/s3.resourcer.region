@@ -629,11 +629,17 @@ var s3_resourcer = {
     // Resource factory functions to be reused
     //
     var toS3Resource = function(name, params, credentials) {
+        var url = "s3://" + params.bucket + "/" + params.obj;
+        
+        // Encode region into URL structure if provided
+        if (params.region) {
+            url += "//s3config::/region:" + params.region;
+        }
+        
         return {
             name: name,
-            url: "s3://" + params.bucket + "/" + params.obj,
+            url: url,
             format: params.format,
-            region: params.region || "",
             identity: credentials.awskey,
             secret: credentials.awssecret
         };
@@ -671,9 +677,6 @@ var s3_resourcer = {
       if (params.read) {
         query.push("read=" + params.read);
       }
-      if (params.region) {
-        query.push("region=" + params.region);
-      }
       if (params.config) {
         var configs = params.config.split("\n");
         for (var i = 0; i < configs.length; i++) {
@@ -685,10 +688,16 @@ var s3_resourcer = {
     
     var toSparkResource = function(name, params, credentials) {
       var query = makeSparkQuery(params);
+      var url = "s3+spark://" + params.bucket + "/" + params.obj + (query.length > 0 ? "?" + query.join("&") : "");
+      
+      // Encode region into URL structure if provided
+      if (params.region) {
+          url += "//s3config::/region:" + params.region;
+      }
+      
       return {
           name: name,
-          url: "s3+spark://" + params.bucket + "/" + params.obj + (query.length > 0 ? "?" + query.join("&") : ""),
-          region: params.region || "",
+          url: url,
           identity: credentials.awskey,
           secret: credentials.awssecret
       };
